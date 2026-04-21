@@ -1,0 +1,57 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <sstream>
+#include "bpt.hpp"
+
+int main() {
+    std::ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
+
+    BPTree tree("database.bpt");
+
+    int n;
+    std::cin >> n;
+    std::cin.ignore();  // Consume newline
+
+    for (int i = 0; i < n; i++) {
+        std::string line;
+        std::getline(std::cin, line);
+        std::istringstream iss(line);
+
+        std::string command;
+        iss >> command;
+
+        if (command == "insert") {
+            std::string key;
+            int value;
+            iss >> key >> value;
+            std::cerr << "INSERT: " << key << " = " << value << std::endl;
+            tree.insert(key, value);
+        } else if (command == "delete") {
+            std::string key;
+            int value;
+            iss >> key >> value;
+            std::cerr << "DELETE: " << key << " = " << value << std::endl;
+            tree.remove(key, value);
+        } else if (command == "find") {
+            std::string key;
+            iss >> key;
+            std::cerr << "FIND: " << key << std::endl;
+            std::vector<int> values = tree.find(key);
+
+            std::cerr << "Found " << values.size() << " values" << std::endl;
+            if (values.empty()) {
+                std::cout << "null\n";
+            } else {
+                for (size_t j = 0; j < values.size(); j++) {
+                    if (j > 0) std::cout << " ";
+                    std::cout << values[j];
+                }
+                std::cout << "\n";
+            }
+        }
+    }
+
+    return 0;
+}

@@ -56,11 +56,20 @@ void BPTree::insert(const std::string& key, int value) {
     BPTNode node = readNode(root_page);
 
     while (!node.is_leaf) {
-        int pos = 0;
-        while (pos < node.key_count && std::string(node.keys[pos]) < key) {
-            pos++;
+        // Binary search to find the correct child
+        int left = 0, right = node.key_count - 1;
+        int child_pos = node.key_count; // Default to last child
+
+        while (left <= right) {
+            int mid = (left + right) / 2;
+            if (std::string(node.keys[mid]) < key) {
+                left = mid + 1;
+            } else {
+                right = mid - 1;
+                child_pos = mid;
+            }
         }
-        int child_page = node.children[pos];
+        int child_page = node.children[child_pos];
         if (child_page == -1) {
             // This shouldn't happen in a properly constructed tree
             return;
@@ -68,10 +77,32 @@ void BPTree::insert(const std::string& key, int value) {
         node = readNode(child_page);
     }
 
-    // Check if key-value pair already exists
-    for (int i = 0; i < node.key_count; i++) {
-        if (std::string(node.keys[i]) == key && node.values[i] == value) {
-            return;  // Duplicate found, don't insert
+    // Binary search to check if key-value pair already exists
+    int left = 0, right = node.key_count - 1;
+    while (left <= right) {
+        int mid = (left + right) / 2;
+        int cmp = std::string(node.keys[mid]).compare(key);
+        if (cmp < 0) {
+            left = mid + 1;
+        } else if (cmp > 0) {
+            right = mid - 1;
+        } else {
+            // Found the key, check if value exists
+            int pos = mid;
+            while (pos >= 0 && std::string(node.keys[pos]) == key) {
+                if (node.values[pos] == value) {
+                    return; // Duplicate found
+                }
+                pos--;
+            }
+            pos = mid + 1;
+            while (pos < node.key_count && std::string(node.keys[pos]) == key) {
+                if (node.values[pos] == value) {
+                    return; // Duplicate found
+                }
+                pos++;
+            }
+            break;
         }
     }
 
@@ -252,42 +283,70 @@ std::vector<int> BPTree::find(const std::string& key) {
     BPTNode node = readNode(root_page);
 
     while (!node.is_leaf) {
-        int pos = 0;
-        while (pos < node.key_count && std::string(node.keys[pos]) < key) {
-            pos++;
-        }
-        node = readNode(node.children[pos]);
-    }
+        // Binary search to find the correct child
+        int left = 0, right = node.key_count - 1;
+        int child_pos = node.key_count; // Default to last child
 
-    // Find all values with the key
-    // First check this leaf
-    for (int i = 0; i < node.key_count; i++) {
-        if (std::string(node.keys[i]) == key) {
-            result.push_back(node.values[i]);
-        }
-    }
-
-    // Check next leaves if they have the same key
-    int next_page = node.next_leaf;
-    while (next_page != -1) {
-        BPTNode next_leaf = readNode(next_page);
-        bool found = false;
-        for (int i = 0; i < next_leaf.key_count; i++) {
-            if (std::string(next_leaf.keys[i]) == key) {
-                result.push_back(next_leaf.values[i]);
-                found = true;
-            } else if (found) {
-                // Since keys are sorted, if we found the key and now it's different, we can stop
-                break;
+        while (left <= right) {
+            int mid = (left + right) / 2;
+            if (std::string(node.keys[mid]) < key) {
+                left = mid + 1;
+            } else {
+                right = mid - 1;
+                child_pos = mid;
             }
         }
-        next_page = next_leaf.next_leaf;
+        node = readNode(node.children[child_pos]);
     }
 
-    // Sort the result (though it should already be sorted)
-    std::sort(result.begin(), result.end());
+    // Binary search to find the key in the leaf
+    int left = 0, right = node.key_count - 1;
+    while (left <= right) {
+        int mid = (left + right) / 2;
+        int cmp = std::string(node.keys[mid]).compare(key);
+        if (cmp < 0) {
+            left = mid + 1;
+        } else if (cmp > 0) {
+            right = mid - 1;
+        } else {
+            // Found the key, collect all values
+            // Go left to find the first occurrence
+            int first = mid;
+            while (first > 0 && std::string(node.keys[first - 1]) == key) {
+                first--;
+            }
 
-    return result;
+            // Collect all values for this key
+            int pos = first;
+            while (pos < node.key_count && std::string(node.keys[pos]) == key) {
+                result.push_back(node.values[pos]);
+                pos++;
+            }
+
+            // Check next leaves if they have the same key
+            int next_page = node.next_leaf;
+            while (next_page != -1) {
+                BPTNode next_leaf = readNode(next_page);
+                bool found_more = false;
+                for (int i = 0; i < next_leaf.key_count; i++) {
+                    if (std::string(next_leaf.keys[i]) == key) {
+                        result.push_back(next_leaf.values[i]);
+                        found_more = true;
+                    } else if (found_more) {
+                        break;
+                    }
+                }
+                if (!found_more) break;
+                next_page = next_leaf.next_leaf;
+            }
+
+            // Sort the result (though it should already be sorted)
+            std::sort(result.begin(), result.end());
+            return result;
+        }
+    }
+
+    return result; // Key not found
 }
 
 void BPTree::remove(const std::string& key, int value) {
@@ -302,26 +361,48 @@ void BPTree::remove(const std::string& key, int value) {
         node = readNode(node.children[pos]);
     }
 
-    // Find and remove the key-value pair
-    int pos = 0;
-    while (pos < node.key_count && (std::string(node.keys[pos]) < key ||
-           (std::string(node.keys[pos]) == key && node.values[pos] < value))) {
-        pos++;
-    }
+    // Find the key in the leaf using binary search
+    int left = 0, right = node.key_count - 1;
+    while (left <= right) {
+        int mid = (left + right) / 2;
+        int cmp = std::string(node.keys[mid]).compare(key);
+        if (cmp < 0) {
+            left = mid + 1;
+        } else if (cmp > 0) {
+            right = mid - 1;
+        } else {
+            // Found the key, now find the exact value
+            // Since values are sorted, search around this position
+            int pos = mid;
+            while (pos >= 0 && std::string(node.keys[pos]) == key) {
+                if (node.values[pos] == value) {
+                    // Found it, remove
+                    for (int i = pos; i < node.key_count - 1; i++) {
+                        strcpy(node.keys[i], node.keys[i + 1]);
+                        node.values[i] = node.values[i + 1];
+                    }
+                    node.key_count--;
+                    writeNode(node.page_num, node);
+                    return;
+                }
+                pos--;
+            }
 
-    if (pos < node.key_count && std::string(node.keys[pos]) == key && node.values[pos] == value) {
-        // Found it, remove
-        for (int i = pos; i < node.key_count - 1; i++) {
-            strcpy(node.keys[i], node.keys[i + 1]);
-            node.values[i] = node.values[i + 1];
-        }
-        node.key_count--;
-        writeNode(node.page_num, node);
-
-        // Handle underflow if necessary (simplified for now)
-        if (node.page_num != root_page && node.key_count < MIN_KEYS) {
-            // For now, we don't handle merging/redistribution
-            // This may cause issues with very large datasets
+            pos = mid + 1;
+            while (pos < node.key_count && std::string(node.keys[pos]) == key) {
+                if (node.values[pos] == value) {
+                    // Found it, remove
+                    for (int i = pos; i < node.key_count - 1; i++) {
+                        strcpy(node.keys[i], node.keys[i + 1]);
+                        node.values[i] = node.values[i + 1];
+                    }
+                    node.key_count--;
+                    writeNode(node.page_num, node);
+                    return;
+                }
+                pos++;
+            }
+            return; // Value not found
         }
     }
 }

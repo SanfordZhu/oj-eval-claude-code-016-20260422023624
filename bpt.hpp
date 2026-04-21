@@ -6,8 +6,8 @@
 #include <fstream>
 #include <algorithm>
 
-const int MAX_KEYS = 32;   // Maximum keys per node (reduced for testing)
-const int MIN_KEYS = 16;   // Minimum keys per node (except root)
+const int MAX_KEYS = 256;  // Maximum keys per node
+const int MIN_KEYS = 128;  // Minimum keys per node (except root)
 
 struct BPTNode {
     bool is_leaf;
